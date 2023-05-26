@@ -1,0 +1,25 @@
+[package]
+name = "egui_test"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytemuck = "1.13.1"
+chrono = "0.4.24"
+egui = "0.22.0"
+egui-wgpu = "0.22.0"
+winit_backend = { path = "./winit_backend" }
+wgpu_backend = { path = "./wgpu_backend" }
+epi = "0.17.0"
+pollster = "0.3.0"
+wgpu = "0.16.1"
+winit = "0.28.6"
+egui_demo_lib = "0.22.0"
+
+[workspace]
+members = [
+    "wgpu_backend",
+    "winit_backend",
+]
