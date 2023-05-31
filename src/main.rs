@@ -1,12 +1,14 @@
 use std::iter;
 use std::time::Instant;
 
-use egui::FontDefinitions;
 use chrono::Timelike;
+use egui::{Color32, FontDefinitions, Rounding, Stroke};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
-use winit_backend::{Platform, PlatformDescriptor};
 use winit::event::Event::*;
+use winit_backend::{Platform, PlatformDescriptor};
+
 use winit::event_loop::ControlFlow;
+
 const INITIAL_WIDTH: u32 = 1920;
 const INITIAL_HEIGHT: u32 = 1080;
 
@@ -22,6 +24,26 @@ struct ExampleRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<E
 impl epi::backend::RepaintSignal for ExampleRepaintSignal {
     fn request_repaint(&self) {
         self.0.lock().unwrap().send_event(Event::RequestRedraw).ok();
+    }
+}
+
+struct TabViewer<'a> {
+    added_nodes: &'a mut Vec<egui_dock::tree::NodeIndex>,
+}
+
+impl egui_dock::TabViewer for TabViewer<'_> {
+    type Tab = usize;
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
+        ui.label(format!("Content of tab {tab}"));
+    }
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        format!("Tab {tab}").into()
+    }
+
+    fn on_add(&mut self, node: egui_dock::tree::NodeIndex) {
+        self.added_nodes.push(node);
     }
 }
 
@@ -86,6 +108,7 @@ fn main() {
         alpha_mode,
         view_formats: Vec::new(),
     };
+
     surface.configure(&device, &surface_config);
 
     // We use the egui_winit_platform crate as the platform.
@@ -94,14 +117,20 @@ fn main() {
         physical_height: size.height as u32,
         scale_factor: window.scale_factor(),
         font_definitions: FontDefinitions::default(),
-        style: Default::default(),
+        style: egui::Style::default(),
     });
 
     // We use the egui_wgpu_backend crate as the render backend.
     let mut egui_rpass = RenderPass::new(&device, surface_format, 1);
 
-    // Display the demo application that ships with egui.
-    let mut demo_app = egui_demo_lib::DemoWindows::default();
+    // init tab tree
+    let mut tree = egui_dock::tree::Tree::new(vec![1, 2]);
+    let mut counter = 0;
+
+    // add tabs
+    let [a, b] = tree.split_left(egui_dock::tree::NodeIndex::root(), 0.3, vec![3]);
+    let [_, _] = tree.split_below(a, 0.7, vec![4]);
+    let [_, _] = tree.split_below(b, 0.5, vec![5]);
 
     let start_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -133,7 +162,36 @@ fn main() {
                 platform.begin_frame();
 
                 // Draw the demo application.
-                demo_app.ui(&platform.context());
+                let mut added_nodes = Vec::new();
+                egui_dock::DockArea::new(&mut tree)
+                    .show_add_buttons(true)
+                    .style(egui_dock::Style {
+                        dock_area_padding: None,
+                        selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 30),
+                        border: Stroke::new(f32::default(), Color32::BLACK),
+                        buttons: egui_dock::ButtonsStyle::default(),
+                        separator: egui_dock::SeparatorStyle::default(),
+                        tab_bar: egui_dock::TabBarStyle {
+                            bg_fill: Color32::WHITE,
+                            height: 36.0,
+                            show_scroll_bar_on_overflow: false,
+                            rounding: Rounding::none(),
+                            hline_color: Color32::from_gray(0x1E),
+                        },
+                        tabs: egui_dock::TabStyle::default(),
+                    })
+                    .show(
+                        &platform.context(),
+                        &mut TabViewer {
+                            added_nodes: &mut added_nodes,
+                        },
+                    );
+
+                added_nodes.drain(..).for_each(|node| {
+                    tree.set_focused_node(node);
+                    tree.push_to_focused_leaf(counter);
+                    counter += 1;
+                });
 
                 // End the UI frame. We could now handle the output and draw the UI with the backend.
                 let full_output = platform.end_frame(Some(&window));
@@ -187,9 +245,6 @@ fn main() {
             }
             WindowEvent { event, .. } => match event {
                 winit::event::WindowEvent::Resized(size) => {
-                    // Resize with 0 width and height is used by winit to signal a minimize event on Windows.
-                    // See: https://github.com/rust-windowing/winit/issues/208
-                    // This solves an issue where the app would panic when minimizing on Windows.
                     if size.width > 0 && size.height > 0 {
                         surface_config.width = size.width;
                         surface_config.height = size.height;
