@@ -3,11 +3,10 @@
 //! You need to create a [`Platform`] and feed it with `winit::event::Event` events.
 //! Use `begin_frame()` and `end_frame()` to start drawing the egui UI.
 //! A basic usage example can be found [here](https://github.com/hasenbanck/egui_example).
-#![warn(missing_docs)]
 
+use egui::{FontData, FontDefinitions, FontFamily};
 use std::collections::HashMap;
 
-#[cfg(feature = "clipboard")]
 use copypasta::{ClipboardContext, ClipboardProvider};
 use egui::{
     emath::{pos2, vec2},
@@ -28,24 +27,10 @@ pub struct PlatformDescriptor {
     pub physical_height: u32,
     /// HiDPI scale factor.
     pub scale_factor: f64,
-    /// Egui font configuration.
-    pub font_definitions: egui::FontDefinitions,
     /// Egui style configuration.
     pub style: egui::Style,
 }
 
-#[cfg(feature = "webbrowser")]
-fn handle_links(output: &egui::PlatformOutput) {
-    if let Some(open_url) = &output.open_url {
-        // This does not handle open_url.new_tab
-        // webbrowser does not support web anyway
-        if let Err(err) = webbrowser::open(&open_url.url) {
-            eprintln!("Failed to open url: {}", err);
-        }
-    }
-}
-
-#[cfg(feature = "clipboard")]
 fn handle_clipboard(output: &egui::PlatformOutput, clipboard: Option<&mut ClipboardContext>) {
     if !output.copied_text.is_empty() {
         if let Some(clipboard) = clipboard {
@@ -63,8 +48,6 @@ pub struct Platform {
     raw_input: egui::RawInput,
     modifier_state: ModifiersState,
     pointer_pos: Option<egui::Pos2>,
-
-    #[cfg(feature = "clipboard")]
     clipboard: Option<ClipboardContext>,
 
     // For emulating pointer events from touch events we merge multi-touch
@@ -82,8 +65,33 @@ impl Platform {
     pub fn new(descriptor: PlatformDescriptor) -> Self {
         let context = Context::default();
 
-        context.set_fonts(descriptor.font_definitions.clone());
+        let mut fonts = FontDefinitions::default();
+
+        fonts.font_data.insert(
+            "liga".to_owned(),
+            FontData::from_static(include_bytes!("../../LigaSFMonoNerdFont-Regular.ttf")),
+        );
+
+        fonts.font_data.insert(
+            "icons".to_owned(),
+            FontData::from_static(include_bytes!("../../IcoMoon.ttf")),
+        );
+
+        fonts
+            .families
+            .get_mut(&FontFamily::Monospace)
+            .unwrap()
+            .push("icons".to_owned());
+
+        fonts
+            .families
+            .get_mut(&FontFamily::Monospace)
+            .unwrap()
+            .push("liga".to_owned());
+
+        context.set_fonts(fonts);
         context.set_style(descriptor.style);
+
         let raw_input = egui::RawInput {
             pixels_per_point: Some(descriptor.scale_factor as f32),
             screen_rect: Some(egui::Rect::from_min_size(
@@ -102,7 +110,6 @@ impl Platform {
             raw_input,
             modifier_state: winit::event::ModifiersState::empty(),
             pointer_pos: Some(Pos2::default()),
-            #[cfg(feature = "clipboard")]
             clipboard: ClipboardContext::new().ok(),
             touch_pointer_pressed: 0,
             device_indices: HashMap::new(),
@@ -117,10 +124,6 @@ impl Platform {
                 window_id: _window_id,
                 event,
             } => match event {
-                // Resize with 0 width and height is used by winit to signal a minimize event on Windows.
-                // See: https://github.com/rust-windowing/winit/issues/208
-                // There is nothing to do for minimize events, so it is ignored here. This solves an issue where
-                // egui window positions would be changed when minimizing on Windows.
                 Resized(PhysicalSize {
                     width: 0,
                     height: 0,
@@ -310,7 +313,6 @@ impl Platform {
                                 self.raw_input.events.push(egui::Event::Cut)
                             }
                             (true, true, VirtualKeyCode::V) => {
-                                #[cfg(feature = "clipboard")]
                                 if let Some(ref mut clipboard) = self.clipboard {
                                     if let Ok(contents) = clipboard.get_contents() {
                                         self.raw_input.events.push(egui::Event::Text(contents))
@@ -358,13 +360,9 @@ impl Platform {
                 ReceivedCharacter(_) | KeyboardInput { .. } | ModifiersChanged(_) => {
                     self.context().wants_keyboard_input()
                 }
-
                 MouseWheel { .. } | MouseInput { .. } => self.context().wants_pointer_input(),
-
                 CursorMoved { .. } => self.context().is_using_pointer(),
-
                 Touch { .. } => self.context().is_using_pointer(),
-
                 _ => false,
             },
 
@@ -386,8 +384,6 @@ impl Platform {
     /// as `PaintJobs`. If the optional `window` is set, it will set the cursor key based on
     /// egui's instructions.
     pub fn end_frame(&mut self, window: Option<&winit::window::Window>) -> egui::FullOutput {
-        // otherwise the below line gets flagged by clippy if both clipboard and webbrowser features are disabled
-        #[allow(clippy::let_and_return)]
         let output = self.context.end_frame();
 
         if let Some(window) = window {
@@ -403,11 +399,7 @@ impl Platform {
             }
         }
 
-        #[cfg(feature = "clipboard")]
         handle_clipboard(&output.platform_output, self.clipboard.as_mut());
-
-        #[cfg(feature = "webbrowser")]
-        handle_links(&output.platform_output);
 
         output
     }

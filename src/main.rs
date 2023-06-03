@@ -1,16 +1,17 @@
-use std::iter;
-use std::time::Instant;
+use std::{collections::BTreeMap, time::Instant};
 
 use chrono::Timelike;
-use egui::{Color32, FontDefinitions, Rounding, Stroke};
+use egui::{CentralPanel, Color32, FontFamily, FontId, Rounding, Stroke, TextStyle};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
 use winit::event::Event::*;
 use winit_backend::{Platform, PlatformDescriptor};
 
 use winit::event_loop::ControlFlow;
 
-const INITIAL_WIDTH: u32 = 1920;
-const INITIAL_HEIGHT: u32 = 1080;
+mod icons;
+
+const INITIAL_WIDTH: u32 = 1300;
+const INITIAL_HEIGHT: u32 = 900;
 
 /// A custom event type for the winit app.
 enum Event {
@@ -27,23 +28,30 @@ impl epi::backend::RepaintSignal for ExampleRepaintSignal {
     }
 }
 
-struct TabViewer<'a> {
-    added_nodes: &'a mut Vec<egui_dock::tree::NodeIndex>,
+#[derive(PartialEq)]
+enum TabKind {
+    Source(String),
+    Listing(usize),
 }
 
-impl egui_dock::TabViewer for TabViewer<'_> {
-    type Tab = usize;
+type Title = &'static str;
 
-    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
-        ui.label(format!("Content of tab {tab}"));
+struct Buffers {
+    buffers: BTreeMap<Title, TabKind>,
+}
+
+impl egui_dock::TabViewer for Buffers {
+    type Tab = Title;
+
+    fn ui(&mut self, ui: &mut egui::Ui, title: &mut Self::Tab) {
+        match self.buffers.get(title).unwrap() {
+            TabKind::Source(src) => ui.label(src),
+            TabKind::Listing(id) => ui.label(id.to_string()),
+        };
     }
 
-    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
-        format!("Tab {tab}").into()
-    }
-
-    fn on_add(&mut self, node: egui_dock::tree::NodeIndex) {
-        self.added_nodes.push(node);
+    fn title(&mut self, title: &mut Self::Tab) -> egui::WidgetText {
+        (*title).into()
     }
 }
 
@@ -111,26 +119,90 @@ fn main() {
 
     surface.configure(&device, &surface_config);
 
+    let dock_style = egui_dock::Style {
+        dock_area_padding: None,
+        selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 30),
+        border: Stroke::NONE,
+        buttons: egui_dock::ButtonsStyle {
+            close_tab_color: Color32::from_gray(0xaa),
+            close_tab_active_color: Color32::from_gray(0xaa),
+            close_tab_bg_fill: Color32::TRANSPARENT,
+            ..Default::default()
+        },
+        separator: egui_dock::SeparatorStyle {
+            width: 3.0,
+            color_idle: Color32::from_gray(0x28),
+            color_hovered: Color32::from_gray(0x28),
+            color_dragged: Color32::from_gray(0x28),
+            ..Default::default()
+        },
+        tab_bar: egui_dock::TabBarStyle {
+            bg_fill: Color32::from_gray(0x28),
+            height: 30.0,
+            show_scroll_bar_on_overflow: false,
+            rounding: Rounding::same(2.0),
+            hline_color: Color32::from_gray(0x1E),
+        },
+        tabs: egui_dock::TabStyle {
+            bg_fill: Color32::from_gray(0x30),
+            text_color_focused: Color32::from_gray(0xff),
+            text_color_unfocused: Color32::from_gray(0xaa),
+            text_color_active_focused: Color32::from_gray(0xff),
+            text_color_active_unfocused: Color32::from_gray(0xaa),
+            ..Default::default()
+        },
+    };
+
+    let style = egui::Style {
+        text_styles: [
+            (TextStyle::Heading, FontId::new(25.0, FontFamily::Monospace)),
+            (
+                TextStyle::Name("Heading2".into()),
+                FontId::new(25.0, FontFamily::Monospace),
+            ),
+            (
+                TextStyle::Name("Context".into()),
+                FontId::new(23.0, FontFamily::Monospace),
+            ),
+            (TextStyle::Body, FontId::new(18.0, FontFamily::Monospace)),
+            (
+                TextStyle::Monospace,
+                FontId::new(14.0, FontFamily::Monospace),
+            ),
+            (TextStyle::Button, FontId::new(14.0, FontFamily::Monospace)),
+            (TextStyle::Small, FontId::new(10.0, FontFamily::Monospace)),
+        ]
+        .into(),
+        ..Default::default()
+    };
+
     // We use the egui_winit_platform crate as the platform.
     let mut platform = Platform::new(PlatformDescriptor {
         physical_width: size.width as u32,
         physical_height: size.height as u32,
         scale_factor: window.scale_factor(),
-        font_definitions: FontDefinitions::default(),
-        style: egui::Style::default(),
+        style,
     });
 
     // We use the egui_wgpu_backend crate as the render backend.
     let mut egui_rpass = RenderPass::new(&device, surface_format, 1);
 
-    // init tab tree
-    let mut tree = egui_dock::tree::Tree::new(vec![1, 2]);
-    let mut counter = 0;
+    let source_title = icon!(EMBED2, "source");
+    let disass_title = icon!(PARAGRAPH_LEFT, "disassembly");
 
-    // add tabs
-    let [a, b] = tree.split_left(egui_dock::tree::NodeIndex::root(), 0.3, vec![3]);
-    let [_, _] = tree.split_below(a, 0.7, vec![4]);
-    let [_, _] = tree.split_below(b, 0.5, vec![5]);
+    let buffers = BTreeMap::from([
+        (source_title, TabKind::Listing(1600)),
+        (
+            disass_title,
+            TabKind::Source(String::from("line 1\nline 2\nline 3")),
+        ),
+    ]);
+
+    let mut buffers = Buffers { buffers };
+
+    // init tab tree
+    let mut tree = egui_dock::tree::Tree::new(vec![source_title, disass_title]);
+    tree.set_focused_node(egui_dock::NodeIndex::root());
 
     let start_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -143,17 +215,12 @@ fn main() {
 
                 let output_frame = match surface.get_current_texture() {
                     Ok(frame) => frame,
-                    Err(wgpu::SurfaceError::Outdated) => {
-                        // This error occurs when the app is minimized on Windows.
-                        // Silently return here to prevent spamming the console with:
-                        // "The underlying surface has changed, and therefore the swap chain must be updated"
-                        return;
-                    }
                     Err(e) => {
                         eprintln!("Dropped frame with error: {}", e);
                         return;
                     }
                 };
+
                 let output_view = output_frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
@@ -162,36 +229,35 @@ fn main() {
                 platform.begin_frame();
 
                 // Draw the demo application.
-                let mut added_nodes = Vec::new();
-                egui_dock::DockArea::new(&mut tree)
-                    .show_add_buttons(true)
-                    .style(egui_dock::Style {
-                        dock_area_padding: None,
-                        selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 30),
-                        border: Stroke::new(f32::default(), Color32::BLACK),
-                        buttons: egui_dock::ButtonsStyle::default(),
-                        separator: egui_dock::SeparatorStyle::default(),
-                        tab_bar: egui_dock::TabBarStyle {
-                            bg_fill: Color32::WHITE,
-                            height: 36.0,
-                            show_scroll_bar_on_overflow: false,
-                            rounding: Rounding::none(),
-                            hline_color: Color32::from_gray(0x1E),
-                        },
-                        tabs: egui_dock::TabStyle::default(),
-                    })
-                    .show(
-                        &platform.context(),
-                        &mut TabViewer {
-                            added_nodes: &mut added_nodes,
-                        },
-                    );
+                CentralPanel::default()
+                    .frame(
+                        egui::Frame::central_panel(&platform.context().style())
+                            .inner_margin(0.0)
+                            .fill(Color32::TRANSPARENT),
+                    )
+                    .show(&platform.context(), |ui| {
+                        // alt-tab'ing between tabs
+                        if ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, egui::Key::Tab)) {
+                            let focused_idx = match tree.focused_leaf() {
+                                Some(idx) => idx,
+                                None => egui_dock::NodeIndex::root(),
+                            };
 
-                added_nodes.drain(..).for_each(|node| {
-                    tree.set_focused_node(node);
-                    tree.push_to_focused_leaf(counter);
-                    counter += 1;
-                });
+                            let focused = &mut tree[focused_idx];
+                            if let egui_dock::Node::Leaf { tabs, active, .. } = focused {
+                                if active.0 != tabs.len() - 1 {
+                                    let tab_idx = active.0 + 1;
+                                    tree.set_active_tab(focused_idx, egui_dock::TabIndex(tab_idx));
+                                } else {
+                                    tree.set_active_tab(focused_idx, egui_dock::TabIndex(0));
+                                }
+                            }
+                        }
+
+                        egui_dock::DockArea::new(&mut tree)
+                            .style(dock_style.clone())
+                            .show_inside(ui, &mut buffers);
+                    });
 
                 // End the UI frame. We could now handle the output and draw the UI with the backend.
                 let full_output = platform.end_frame(Some(&window));
@@ -207,10 +273,13 @@ fn main() {
                     physical_height: surface_config.height,
                     scale_factor: window.scale_factor() as f32,
                 };
+
                 let tdelta: egui::TexturesDelta = full_output.textures_delta;
+
                 egui_rpass
                     .add_textures(&device, &queue, &tdelta)
                     .expect("add texture ok");
+
                 egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
 
                 // Record all render passes.
@@ -224,7 +293,7 @@ fn main() {
                     )
                     .unwrap();
                 // Submit the commands.
-                queue.submit(iter::once(encoder.finish()));
+                queue.submit(std::iter::once(encoder.finish()));
 
                 // Redraw egui
                 output_frame.present();
@@ -232,13 +301,6 @@ fn main() {
                 egui_rpass
                     .remove_textures(tdelta)
                     .expect("remove texture ok");
-
-                // Support reactive on windows only, but not on linux.
-                // if _output.needs_repaint {
-                //     *control_flow = ControlFlow::Poll;
-                // } else {
-                //     *control_flow = ControlFlow::Wait;
-                // }
             }
             MainEventsCleared | UserEvent(Event::RequestRedraw) => {
                 window.request_redraw();
