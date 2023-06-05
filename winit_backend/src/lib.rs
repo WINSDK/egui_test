@@ -365,7 +365,6 @@ impl Platform {
                 Touch { .. } => self.context().is_using_pointer(),
                 _ => false,
             },
-
             _ => false,
         }
     }

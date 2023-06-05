@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, time::Instant};
 
-use chrono::Timelike;
-use egui::{CentralPanel, Color32, FontFamily, FontId, Rounding, Stroke, TextStyle};
+use egui::{Button, CentralPanel, Color32, FontFamily, FontId, Stroke, TextStyle, RichText};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
 use winit::event::Event::*;
 use winit_backend::{Platform, PlatformDescriptor};
@@ -9,6 +8,7 @@ use winit_backend::{Platform, PlatformDescriptor};
 use winit::event_loop::ControlFlow;
 
 mod icons;
+mod style;
 
 const INITIAL_WIDTH: u32 = 1300;
 const INITIAL_HEIGHT: u32 = 900;
@@ -119,41 +119,10 @@ fn main() {
 
     surface.configure(&device, &surface_config);
 
-    let dock_style = egui_dock::Style {
-        dock_area_padding: None,
-        selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 30),
-        border: Stroke::NONE,
-        buttons: egui_dock::ButtonsStyle {
-            close_tab_color: Color32::from_gray(0xaa),
-            close_tab_active_color: Color32::from_gray(0xaa),
-            close_tab_bg_fill: Color32::TRANSPARENT,
-            ..Default::default()
-        },
-        separator: egui_dock::SeparatorStyle {
-            width: 3.0,
-            color_idle: Color32::from_gray(0x28),
-            color_hovered: Color32::from_gray(0x28),
-            color_dragged: Color32::from_gray(0x28),
-            ..Default::default()
-        },
-        tab_bar: egui_dock::TabBarStyle {
-            bg_fill: Color32::from_gray(0x28),
-            height: 30.0,
-            show_scroll_bar_on_overflow: false,
-            rounding: Rounding::same(2.0),
-            hline_color: Color32::from_gray(0x1E),
-        },
-        tabs: egui_dock::TabStyle {
-            bg_fill: Color32::from_gray(0x30),
-            text_color_focused: Color32::from_gray(0xff),
-            text_color_unfocused: Color32::from_gray(0xaa),
-            text_color_active_focused: Color32::from_gray(0xff),
-            text_color_active_unfocused: Color32::from_gray(0xaa),
-            ..Default::default()
-        },
-    };
+    let style = style::Style::default();
+    let dock_style = style.dock();
 
-    let style = egui::Style {
+    let egui_style = egui::Style {
         text_styles: [
             (TextStyle::Heading, FontId::new(25.0, FontFamily::Monospace)),
             (
@@ -181,14 +150,14 @@ fn main() {
         physical_width: size.width as u32,
         physical_height: size.height as u32,
         scale_factor: window.scale_factor(),
-        style,
+        style: egui_style,
     });
 
-    // We use the egui_wgpu_backend crate as the render backend.
+    // We use the egui_wgpu_backend crate as the render backend
     let mut egui_rpass = RenderPass::new(&device, surface_format, 1);
 
-    let source_title = icon!(EMBED2, "source");
-    let disass_title = icon!(PARAGRAPH_LEFT, "disassembly");
+    let source_title = icon!(EMBED2, "Source");
+    let disass_title = icon!(PARAGRAPH_LEFT, "Disassembly");
 
     let buffers = BTreeMap::from([
         (source_title, TabKind::Listing(1600)),
@@ -206,7 +175,7 @@ fn main() {
 
     let start_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        // Pass the winit events to the platform integration.
+        // Pass the winit events to the platform integration
         platform.handle_event(&event);
 
         match event {
@@ -225,10 +194,10 @@ fn main() {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
-                // Begin to draw the UI frame.
+                // Begin to draw the UI frame
                 platform.begin_frame();
 
-                // Draw the demo application.
+                // Draw the primary panel
                 CentralPanel::default()
                     .frame(
                         egui::Frame::central_panel(&platform.context().style())
@@ -243,6 +212,11 @@ fn main() {
                                 None => egui_dock::NodeIndex::root(),
                             };
 
+                            // don't do tab'ing if there are no tabs
+                            if tree.len() == 0 {
+                                return;
+                            }
+
                             let focused = &mut tree[focused_idx];
                             if let egui_dock::Node::Leaf { tabs, active, .. } = focused {
                                 if active.0 != tabs.len() - 1 {
@@ -254,12 +228,14 @@ fn main() {
                             }
                         }
 
+                        title_bar_ui(ui, &mut platform);
+
                         egui_dock::DockArea::new(&mut tree)
                             .style(dock_style.clone())
                             .show_inside(ui, &mut buffers);
                     });
 
-                // End the UI frame. We could now handle the output and draw the UI with the backend.
+                // end the UI frame. We could now handle the output and draw the UI with the backend
                 let full_output = platform.end_frame(Some(&window));
                 let paint_jobs = platform.context().tessellate(full_output.shapes);
 
@@ -267,7 +243,7 @@ fn main() {
                     label: Some("encoder"),
                 });
 
-                // Upload all resources for the GPU.
+                // upload all resources for the GPU
                 let screen_descriptor = ScreenDescriptor {
                     physical_width: surface_config.width,
                     physical_height: surface_config.height,
@@ -323,8 +299,98 @@ fn main() {
     });
 }
 
-/// Time of day as seconds since midnight. Used for clock in demo app.
-pub fn seconds_since_midnight() -> f64 {
-    let time = chrono::Local::now().time();
-    time.num_seconds_from_midnight() as f64 + 1e-9 * (time.nanosecond() as f64)
+fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
+    let title_bar_height = 32.0;
+    let title_bar_rect = {
+        let mut rect = ui.max_rect();
+        rect.max.y = rect.min.y + title_bar_height;
+        rect
+    };
+
+    {
+        let mut visuals = ui.visuals_mut();
+        visuals.widgets.noninteractive.bg_stroke.width = 0.0;
+        visuals.widgets.inactive.bg_stroke.width = 0.0;
+        visuals.widgets.hovered.bg_stroke.width = 0.0;
+        visuals.widgets.active.bg_stroke.width = 0.0;
+        visuals.widgets.open.bg_stroke.width = 0.0;
+
+        visuals.popup_shadow = egui::epaint::Shadow::default();
+    }
+
+    let painter = ui.painter();
+
+    // Paint the line under the title:
+    painter.line_segment(
+        [
+            title_bar_rect.left_bottom() + egui::vec2(1.0, 0.0),
+            title_bar_rect.right_bottom() + egui::vec2(-1.0, 0.0),
+        ],
+        Stroke::NONE,
+    );
+
+    egui::menu::bar(ui, |ui| {
+        ui.menu_button("File", |ui| {
+            if ui.button("Open").clicked() {
+                ui.close_menu();
+            }
+        });
+
+        ui.menu_button("Edit", |ui| {
+            ui.menu_button("My sub-menu", |ui| {
+                if ui.button("Close the menu").clicked() {
+                    ui.close_menu();
+                }
+            });
+        });
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.visuals_mut().button_frame = false;
+
+            close_maximize_minimize(ui, platform);
+        });
+    });
+}
+
+// Show some close/maximize/minimize buttons for the native window.
+fn close_maximize_minimize(ui: &mut egui::Ui, platform: &mut Platform) {
+    let height = 12.0;
+    let close_response = ui.add(
+        Button::new(
+            RichText::new(icon!(CROSS, "")).size(height)
+        )
+    );
+
+    if close_response.clicked() {
+        // platform.close();
+    }
+
+    // if platform.window_info.maximized {
+    //     let maximized_response = ui
+    //         .add(Button::new(RichText::new("🗗").size(button_height)));
+
+    //     if maximized_response.clicked() {
+    //         // platform.set_maximized(false);
+    //     }
+    // } else {
+    let maximized_response = ui.add(
+        Button::new(
+            RichText::new(icon!(CHECKBOX_UNCHECKED, "")).size(height)
+        )
+    );
+
+    if maximized_response.clicked() {
+        // platform.set_maximized(true);
+    }
+
+    let minimized_response = ui.add(
+        Button::new(
+            RichText::new(icon!(MINUS, "")).size(height)
+        )
+    );
+
+    if minimized_response.clicked() {
+        // platform.set_minimized(true);
+    }
 }

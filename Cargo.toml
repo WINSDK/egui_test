@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 bytemuck = "1.13.1"
-chrono = "0.4.24"
 egui = "0.22.0"
 egui-wgpu = "0.22.0"
 winit_backend = { path = "./winit_backend" }
