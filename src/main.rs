@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, time::Instant};
 
-use egui::{Button, CentralPanel, Color32, FontFamily, FontId, RichText, Rounding, TextStyle};
+use egui::{Button, CentralPanel, FontFamily, FontId, RichText, TextStyle};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
 use winit::event::Event::*;
 use winit_backend::{Platform, PlatformDescriptor};
@@ -332,7 +332,7 @@ fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
             });
         });
 
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             close_maximize_minimize(ui, platform);
         });
