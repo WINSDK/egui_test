@@ -1,4 +1,6 @@
-use egui::{Rounding, Color32, Stroke, Ui};
+use egui::epaint::Shadow;
+use egui::style::{Interaction, Selection, Spacing, Visuals, WidgetVisuals, Widgets};
+use egui::{vec2, Color32, Margin, Rounding, Stroke};
 
 #[derive(Clone)]
 pub struct Style {
@@ -23,7 +25,7 @@ impl Default for Style {
             selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 60),
             close_tab_color: Color32::from_gray(0xaa),
             tab_color: Color32::from_gray(0x30),
-            tab_rounding: Rounding::same(2.0),
+            tab_rounding: Rounding::none(),
             active_text_color: Color32::from_gray(0xff),
             text_color: Color32::from_gray(0xaa),
             separator: Color32::from_gray(0x28),
@@ -32,18 +34,150 @@ impl Default for Style {
 }
 
 impl Style {
+    pub fn egui(&self) -> egui::Style {
+        egui::Style {
+            override_text_style: None,
+            override_font_id: None,
+            wrap: None,
+            spacing: Spacing {
+                menu_margin: Margin {
+                    top: 0.0,
+                    bottom: 3.0,
+                    left: 3.0,
+                    right: 3.0,
+                },
+                combo_width: 0.0,
+                scroll_bar_inner_margin: 0.0,
+                scroll_bar_outer_margin: 0.0,
+                scroll_handle_min_length: 0.0,
+                item_spacing: vec2(8.0, 3.0),
+                window_margin: Margin::same(6.0),
+                button_padding: vec2(0.0, 0.0),
+                indent: 18.0,
+                interact_size: vec2(40.0, 18.0),
+                slider_width: 100.0,
+                text_edit_width: 280.0,
+                icon_width: 14.0,
+                icon_width_inner: 8.0,
+                icon_spacing: 4.0,
+                tooltip_width: 600.0,
+                indent_ends_with_horizontal_line: false,
+                combo_height: 200.0,
+                scroll_bar_width: 8.0,
+            },
+            interaction: Interaction {
+                resize_grab_radius_side: 5.0,
+                resize_grab_radius_corner: 10.0,
+                show_tooltips_only_when_still: false,
+            },
+            visuals: Visuals {
+                menu_rounding: self.tab_rounding,
+                dark_mode: true,
+                override_text_color: None,
+                widgets: Widgets {
+                    noninteractive: WidgetVisuals {
+                        bg_fill: self.tab_color,
+                        weak_bg_fill: Color32::TRANSPARENT,
+                        bg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.text_color,
+                        },
+                        rounding: self.tab_rounding,
+                        fg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.text_color,
+                        },
+                        expansion: 0.0,
+                    },
+                    inactive: WidgetVisuals {
+                        bg_fill: self.tab_color,
+                        weak_bg_fill: Color32::TRANSPARENT,
+                        bg_stroke: Stroke {
+                            width: 0.0,
+                            color: self.text_color,
+                        },
+                        rounding: self.tab_rounding,
+                        fg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.text_color,
+                        },
+                        expansion: 0.0,
+                    },
+                    hovered: WidgetVisuals {
+                        bg_fill: self.tab_color,
+                        weak_bg_fill: Color32::TRANSPARENT,
+                        bg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        rounding: self.tab_rounding,
+                        fg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        expansion: 0.0,
+                    },
+                    active: WidgetVisuals {
+                        bg_fill: self.tab_color,
+                        weak_bg_fill: Color32::TRANSPARENT,
+                        bg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        rounding: self.tab_rounding,
+                        fg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        expansion: 0.0,
+                    },
+                    open: WidgetVisuals {
+                        bg_fill: self.tab_color,
+                        weak_bg_fill: Color32::TRANSPARENT,
+                        bg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        rounding: self.tab_rounding,
+                        fg_stroke: Stroke {
+                            width: 1.0,
+                            color: self.active_text_color,
+                        },
+                        expansion: 0.0,
+                    },
+                },
+                selection: Selection {
+                    bg_fill: Color32::from_rgba_unmultiplied(61, 133, 224, 60),
+                    stroke: Stroke {
+                        width: 1.0,
+                        color: Color32::from_rgb(192, 222, 255),
+                    },
+                },
+                button_frame: false,
+                popup_shadow: Shadow::NONE,
+                clip_rect_margin: 0.0,
+                window_rounding: self.tab_rounding,
+                window_fill: self.tab_color,
+                panel_fill: self.tab_color,
+                ..Default::default()
+            },
+            explanation_tooltips: false,
+            ..Default::default()
+        }
+    }
+
     pub fn dock(&self) -> egui_dock::Style {
         egui_dock::Style {
             dock_area_padding: None,
             selection_color: self.selection_color,
             border: Stroke {
+                width: 1.0,
                 color: self.text_color,
-                ..Stroke::default()
             },
             buttons: egui_dock::ButtonsStyle {
                 close_tab_color: self.close_tab_color,
                 close_tab_active_color: self.close_tab_color,
-                close_tab_bg_fill: Color32::TRANSPARENT,
+                close_tab_bg_fill: self.close_tab_color,
                 ..Default::default()
             },
             separator: egui_dock::SeparatorStyle {
@@ -56,7 +190,7 @@ impl Style {
             tab_bar: egui_dock::TabBarStyle {
                 bg_fill: self.separator,
                 height: 30.0,
-                show_scroll_bar_on_overflow: false,
+                show_scroll_bar_on_overflow: true,
                 rounding: self.tab_rounding,
                 hline_color: self.separator,
             },
@@ -69,64 +203,5 @@ impl Style {
                 ..Default::default()
             },
         }
-    }
-
-    pub fn set_theme_visuals(&self, ui: &mut Ui) {
-        let visuals = ui.visuals_mut();
-
-        let expansion = 0.0;
-        visuals.widgets.noninteractive.expansion = expansion;
-        visuals.widgets.inactive.expansion = expansion;
-        visuals.widgets.hovered.expansion = expansion;
-        visuals.widgets.active.expansion = expansion;
-        visuals.widgets.open.expansion = expansion;
-
-        visuals.widgets.noninteractive.bg_fill = self.background;
-        visuals.widgets.inactive.bg_fill = self.background;
-        visuals.widgets.hovered.bg_fill = self.background;
-        visuals.widgets.active.bg_fill = self.active_background;
-        visuals.widgets.open.bg_fill = self.active_background;
-
-        visuals.widgets.noninteractive.fg_stroke.color = self.text_color;
-        visuals.widgets.inactive.fg_stroke.color = self.text_color;
-        visuals.widgets.hovered.fg_stroke.color = self.text_color;
-        visuals.widgets.active.fg_stroke.color = self.active_text_color;
-        visuals.widgets.open.fg_stroke.color = self.active_text_color;
-
-        visuals.extreme_bg_color = self.active_background;
-        visuals.widgets.noninteractive.rounding = self.tab_rounding;
-        visuals.widgets.inactive.rounding = self.tab_rounding;
-        visuals.widgets.hovered.rounding = self.tab_rounding;
-        visuals.widgets.active.rounding = self.tab_rounding;
-        visuals.widgets.open.rounding = self.tab_rounding;
-        visuals.menu_rounding = self.tab_rounding;
-
-        visuals.selection.bg_fill = Color32::from_rgba_unmultiplied(61, 133, 224, 60);
-    }
-
-    pub fn for_scrollbar(&self, ui: &mut Ui) {
-        let spacing = ui.spacing_mut();
-        spacing.scroll_bar_width = 4.0;
-
-        let visuals = ui.visuals_mut();
-
-        visuals.extreme_bg_color = Color32::from_gray(0x2B);
-        visuals.clip_rect_margin = 0.0;
-        visuals.widgets.noninteractive.rounding = self.tab_rounding;
-        visuals.widgets.inactive.rounding = self.tab_rounding;
-        visuals.widgets.hovered.rounding = self.tab_rounding;
-        visuals.widgets.active.rounding = self.tab_rounding;
-        visuals.widgets.open.rounding = self.tab_rounding;
-    }
-
-    pub fn scrollarea(&self, ui: &mut Ui) {
-        let visuals = ui.visuals_mut();
-
-        visuals.extreme_bg_color = self.active_background;
-        visuals.widgets.noninteractive.rounding = self.tab_rounding;
-        visuals.widgets.inactive.rounding = self.tab_rounding;
-        visuals.widgets.hovered.rounding = self.tab_rounding;
-        visuals.widgets.active.rounding = self.tab_rounding;
-        visuals.widgets.open.rounding = self.tab_rounding;
     }
 }

@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, time::Instant};
 
-use egui::{Button, CentralPanel, Color32, FontFamily, FontId, Stroke, TextStyle, RichText};
+use egui::{Button, CentralPanel, Color32, FontFamily, FontId, RichText, Rounding, TextStyle};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
 use winit::event::Event::*;
 use winit_backend::{Platform, PlatformDescriptor};
@@ -37,21 +37,37 @@ enum TabKind {
 type Title = &'static str;
 
 struct Buffers {
-    buffers: BTreeMap<Title, TabKind>,
+    inner: BTreeMap<Title, TabKind>,
+}
+
+impl Buffers {
+    fn has_multiple_tabs(&self) -> bool {
+        self.inner.len() != 1
+    }
 }
 
 impl egui_dock::TabViewer for Buffers {
     type Tab = Title;
 
     fn ui(&mut self, ui: &mut egui::Ui, title: &mut Self::Tab) {
-        match self.buffers.get(title).unwrap() {
-            TabKind::Source(src) => ui.label(src),
-            TabKind::Listing(id) => ui.label(id.to_string()),
+        match self.inner.get(title) {
+            Some(TabKind::Source(src)) => ui.label(src),
+            Some(TabKind::Listing(id)) => ui.label(id.to_string()),
+            _ => return,
         };
     }
 
     fn title(&mut self, title: &mut Self::Tab) -> egui::WidgetText {
         (*title).into()
+    }
+
+    fn on_close(&mut self, tab: &mut Self::Tab) -> bool {
+        if self.inner.len() == 1 {
+            false
+        } else {
+            self.inner.remove(tab);
+            true
+        }
     }
 }
 
@@ -122,28 +138,27 @@ fn main() {
     let style = style::Style::default();
     let dock_style = style.dock();
 
-    let egui_style = egui::Style {
-        text_styles: [
-            (TextStyle::Heading, FontId::new(25.0, FontFamily::Monospace)),
-            (
-                TextStyle::Name("Heading2".into()),
-                FontId::new(25.0, FontFamily::Monospace),
-            ),
-            (
-                TextStyle::Name("Context".into()),
-                FontId::new(23.0, FontFamily::Monospace),
-            ),
-            (TextStyle::Body, FontId::new(18.0, FontFamily::Monospace)),
-            (
-                TextStyle::Monospace,
-                FontId::new(14.0, FontFamily::Monospace),
-            ),
-            (TextStyle::Button, FontId::new(14.0, FontFamily::Monospace)),
-            (TextStyle::Small, FontId::new(10.0, FontFamily::Monospace)),
-        ]
-        .into(),
-        ..Default::default()
-    };
+    let mut egui_style = style.egui();
+
+    egui_style.text_styles = [
+        (TextStyle::Heading, FontId::new(25.0, FontFamily::Monospace)),
+        (
+            TextStyle::Name("Heading2".into()),
+            FontId::new(25.0, FontFamily::Monospace),
+        ),
+        (
+            TextStyle::Name("Context".into()),
+            FontId::new(23.0, FontFamily::Monospace),
+        ),
+        (TextStyle::Body, FontId::new(18.0, FontFamily::Monospace)),
+        (
+            TextStyle::Monospace,
+            FontId::new(14.0, FontFamily::Monospace),
+        ),
+        (TextStyle::Button, FontId::new(14.0, FontFamily::Monospace)),
+        (TextStyle::Small, FontId::new(10.0, FontFamily::Monospace)),
+    ]
+    .into();
 
     // We use the egui_winit_platform crate as the platform.
     let mut platform = Platform::new(PlatformDescriptor {
@@ -167,7 +182,7 @@ fn main() {
         ),
     ]);
 
-    let mut buffers = Buffers { buffers };
+    let mut buffers = Buffers { inner: buffers };
 
     // init tab tree
     let mut tree = egui_dock::tree::Tree::new(vec![source_title, disass_title]);
@@ -202,7 +217,7 @@ fn main() {
                     .frame(
                         egui::Frame::central_panel(&platform.context().style())
                             .inner_margin(0.0)
-                            .fill(Color32::TRANSPARENT),
+                            .fill(style.tab_color),
                     )
                     .show(&platform.context(), |ui| {
                         // alt-tab'ing between tabs
@@ -232,6 +247,8 @@ fn main() {
 
                         egui_dock::DockArea::new(&mut tree)
                             .style(dock_style.clone())
+                            .show_close_buttons(buffers.has_multiple_tabs())
+                            .draggable_tabs(buffers.has_multiple_tabs())
                             .show_inside(ui, &mut buffers);
                     });
 
@@ -300,38 +317,9 @@ fn main() {
 }
 
 fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
-    let title_bar_height = 32.0;
-    let title_bar_rect = {
-        let mut rect = ui.max_rect();
-        rect.max.y = rect.min.y + title_bar_height;
-        rect
-    };
-
-    {
-        let mut visuals = ui.visuals_mut();
-        visuals.widgets.noninteractive.bg_stroke.width = 0.0;
-        visuals.widgets.inactive.bg_stroke.width = 0.0;
-        visuals.widgets.hovered.bg_stroke.width = 0.0;
-        visuals.widgets.active.bg_stroke.width = 0.0;
-        visuals.widgets.open.bg_stroke.width = 0.0;
-
-        visuals.popup_shadow = egui::epaint::Shadow::default();
-    }
-
-    let painter = ui.painter();
-
-    // Paint the line under the title:
-    painter.line_segment(
-        [
-            title_bar_rect.left_bottom() + egui::vec2(1.0, 0.0),
-            title_bar_rect.right_bottom() + egui::vec2(-1.0, 0.0),
-        ],
-        Stroke::NONE,
-    );
-
     egui::menu::bar(ui, |ui| {
         ui.menu_button("File", |ui| {
-            if ui.button("Open").clicked() {
+            if ui.button(icon!(FOLDER_OPEN, "open")).clicked() {
                 ui.close_menu();
             }
         });
@@ -344,10 +332,8 @@ fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
             });
         });
 
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            ui.visuals_mut().button_frame = false;
-
             close_maximize_minimize(ui, platform);
         });
     });
@@ -356,11 +342,7 @@ fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
 // Show some close/maximize/minimize buttons for the native window.
 fn close_maximize_minimize(ui: &mut egui::Ui, platform: &mut Platform) {
     let height = 12.0;
-    let close_response = ui.add(
-        Button::new(
-            RichText::new(icon!(CROSS, "")).size(height)
-        )
-    );
+    let close_response = ui.add(Button::new(RichText::new(icon!(CROSS, "")).size(height)));
 
     if close_response.clicked() {
         // platform.close();
@@ -374,21 +356,15 @@ fn close_maximize_minimize(ui: &mut egui::Ui, platform: &mut Platform) {
     //         // platform.set_maximized(false);
     //     }
     // } else {
-    let maximized_response = ui.add(
-        Button::new(
-            RichText::new(icon!(CHECKBOX_UNCHECKED, "")).size(height)
-        )
-    );
+    let maximized_response = ui.add(Button::new(
+        RichText::new(icon!(CHECKBOX_UNCHECKED, "")).size(height),
+    ));
 
     if maximized_response.clicked() {
         // platform.set_maximized(true);
     }
 
-    let minimized_response = ui.add(
-        Button::new(
-            RichText::new(icon!(MINUS, "")).size(height)
-        )
-    );
+    let minimized_response = ui.add(Button::new(RichText::new(icon!(MINUS, "")).size(height)));
 
     if minimized_response.clicked() {
         // platform.set_minimized(true);
