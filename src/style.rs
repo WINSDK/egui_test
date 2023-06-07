@@ -7,6 +7,7 @@ pub struct Style {
     pub separator_width: f32,
     pub active_background: Color32,
     pub background: Color32,
+    pub button_background: Color32,
     pub selection_color: Color32,
     pub tab_color: Color32,
     pub close_tab_color: Color32,
@@ -22,6 +23,7 @@ impl Default for Style {
             separator_width: 3.0,
             active_background: Color32::from_gray(0x1E),
             background: Color32::from_gray(0x1E),
+            button_background: Color32::from_gray(0x1E),
             selection_color: Color32::from_rgba_unmultiplied(61, 133, 224, 60),
             close_tab_color: Color32::from_gray(0xaa),
             tab_color: Color32::from_gray(0x30),
@@ -178,7 +180,7 @@ impl Style {
                 close_tab_color: self.close_tab_color,
                 close_tab_active_color: self.close_tab_color,
                 close_tab_bg_fill: self.close_tab_color,
-                add_tab_bg_fill: Color32::from_gray(0x10),
+                add_tab_bg_fill: self.button_background,
                 ..Default::default()
             },
             separator: egui_dock::SeparatorStyle {

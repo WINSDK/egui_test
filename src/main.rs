@@ -2,7 +2,8 @@ use std::{collections::HashMap, time::Instant};
 
 use egui::{Button, CentralPanel, FontFamily, FontId, RichText, TextStyle};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
-use winit::event::Event::*;
+use winit::event::Event;
+use winit::event::WindowEvent;
 use winit_backend::{Platform, PlatformDescriptor};
 
 use winit::event_loop::ControlFlow;
@@ -10,23 +11,13 @@ use winit::event_loop::ControlFlow;
 mod icons;
 mod style;
 
+/// A custom event type for the winit app.
+enum CustomEvent {
+    CloseRequest,
+}
+
 const INITIAL_WIDTH: u32 = 1300;
 const INITIAL_HEIGHT: u32 = 900;
-
-/// A custom event type for the winit app.
-enum Event {
-    RequestRedraw,
-}
-
-/// This is the repaint signal type that egui needs for requesting a repaint from another thread.
-/// It sends the custom RequestRedraw event to the winit event loop.
-struct ExampleRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<Event>>);
-
-impl epi::backend::RepaintSignal for ExampleRepaintSignal {
-    fn request_repaint(&self) {
-        self.0.lock().unwrap().send_event(Event::RequestRedraw).ok();
-    }
-}
 
 #[derive(PartialEq)]
 enum TabKind {
@@ -73,7 +64,7 @@ impl egui_dock::TabViewer for Buffers {
 
 /// A simple egui + wgpu + winit based example.
 fn main() {
-    let event_loop = winit::event_loop::EventLoopBuilder::<Event>::with_user_event().build();
+    let event_loop = winit::event_loop::EventLoopBuilder::<CustomEvent>::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
         .with_decorations(true)
         .with_resizable(true)
@@ -166,6 +157,7 @@ fn main() {
         physical_height: size.height as u32,
         scale_factor: window.scale_factor(),
         style: egui_style,
+        winit: event_loop.create_proxy()
     });
 
     // We use the egui_wgpu_backend crate as the render backend
@@ -194,7 +186,7 @@ fn main() {
         platform.handle_event(&event);
 
         match event {
-            RedrawRequested(..) => {
+            Event::RedrawRequested(..) => {
                 platform.update_time(start_time.elapsed().as_secs_f64());
 
                 let output_frame = match surface.get_current_texture() {
@@ -295,28 +287,26 @@ fn main() {
                     .remove_textures(tdelta)
                     .expect("remove texture ok");
             }
-            MainEventsCleared | UserEvent(Event::RequestRedraw) => {
-                window.request_redraw();
+            Event::MainEventsCleared => window.request_redraw(),
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
             }
-            WindowEvent { event, .. } => match event {
-                winit::event::WindowEvent::Resized(size) => {
-                    if size.width > 0 && size.height > 0 {
-                        surface_config.width = size.width;
-                        surface_config.height = size.height;
-                        surface.configure(&device, &surface_config);
-                    }
+            Event::UserEvent(CustomEvent::CloseRequest) => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
+                if size.width > 0 && size.height > 0 {
+                    surface_config.width = size.width;
+                    surface_config.height = size.height;
+                    surface.configure(&device, &surface_config);
                 }
-                winit::event::WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                _ => {}
             },
             _ => (),
         }
     });
 }
 
-fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
+fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform<CustomEvent>) {
     egui::menu::bar(ui, |ui| {
         ui.menu_button("File", |ui| {
             if ui.button(icon!(FOLDER_OPEN, "open")).clicked() {
@@ -340,12 +330,12 @@ fn title_bar_ui(ui: &mut egui::Ui, platform: &mut Platform) {
 }
 
 // Show some close/maximize/minimize buttons for the native window.
-fn close_maximize_minimize(ui: &mut egui::Ui, platform: &mut Platform) {
+fn close_maximize_minimize(ui: &mut egui::Ui, platform: &mut Platform<CustomEvent>) {
     let height = 12.0;
     let close_response = ui.add(Button::new(RichText::new(icon!(CROSS, "")).size(height)));
 
     if close_response.clicked() {
-        // platform.close();
+        platform.send_event(CustomEvent::CloseRequest);
     }
 
     // if platform.window_info.maximized {

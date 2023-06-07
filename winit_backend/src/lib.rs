@@ -19,8 +19,8 @@ use winit::{
 };
 
 /// Configures the creation of the `Platform`.
-#[derive(Debug, Default)]
-pub struct PlatformDescriptor {
+#[derive(Debug)]
+pub struct PlatformDescriptor<E: 'static> {
     /// Width of the window in physical pixel.
     pub physical_width: u32,
     /// Height of the window in physical pixel.
@@ -29,6 +29,8 @@ pub struct PlatformDescriptor {
     pub scale_factor: f64,
     /// Egui style configuration.
     pub style: egui::Style,
+    /// Handle to winit.
+    pub winit: winit::event_loop::EventLoopProxy<E>,
 }
 
 fn handle_clipboard(output: &egui::PlatformOutput, clipboard: Option<&mut ClipboardContext>) {
@@ -42,7 +44,7 @@ fn handle_clipboard(output: &egui::PlatformOutput, clipboard: Option<&mut Clipbo
 }
 
 /// Provides the integration between egui and winit.
-pub struct Platform {
+pub struct Platform<E: 'static> {
     scale_factor: f64,
     context: Context,
     raw_input: egui::RawInput,
@@ -58,11 +60,12 @@ pub struct Platform {
     // device IDs are opaque, so we have to create our own ID mapping.
     device_indices: HashMap<winit::event::DeviceId, u64>,
     next_device_index: u64,
+    winit: winit::event_loop::EventLoopProxy<E>,
 }
 
-impl Platform {
+impl<E: 'static> Platform<E> {
     /// Creates a new `Platform`.
-    pub fn new(descriptor: PlatformDescriptor) -> Self {
+    pub fn new(descriptor: PlatformDescriptor<E>) -> Self {
         let context = Context::default();
 
         let mut fonts = FontDefinitions::default();
@@ -114,11 +117,12 @@ impl Platform {
             touch_pointer_pressed: 0,
             device_indices: HashMap::new(),
             next_device_index: 1,
+            winit: descriptor.winit,
         }
     }
 
     /// Handles the given winit event and updates the egui context. Should be called before starting a new frame with `start_frame()`.
-    pub fn handle_event<T>(&mut self, winit_event: &Event<T>) {
+    pub fn handle_event(&mut self, winit_event: &Event<E>) {
         match winit_event {
             Event::WindowEvent {
                 window_id: _window_id,
@@ -349,9 +353,15 @@ impl Platform {
         }
     }
 
+    pub fn send_event(&self, custom_event: E) {
+        if self.winit.send_event(custom_event).is_err() {
+            panic!("no event loop somehow to handle event");
+        }
+    }
+
     /// Returns `true` if egui should handle the event exclusively. Check this to
     /// avoid unexpected interactions, e.g. a mouse click registering "behind" the UI.
-    pub fn captures_event<T>(&self, winit_event: &Event<T>) -> bool {
+    pub fn captures_event<T>(&self, winit_event: &Event<E>) -> bool {
         match winit_event {
             Event::WindowEvent {
                 window_id: _window_id,
