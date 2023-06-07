@@ -178,6 +178,7 @@ impl Style {
                 close_tab_color: self.close_tab_color,
                 close_tab_active_color: self.close_tab_color,
                 close_tab_bg_fill: self.close_tab_color,
+                add_tab_bg_fill: Color32::from_gray(0x10),
                 ..Default::default()
             },
             separator: egui_dock::SeparatorStyle {

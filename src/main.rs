@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Instant};
+use std::{collections::HashMap, time::Instant};
 
 use egui::{Button, CentralPanel, FontFamily, FontId, RichText, TextStyle};
 use wgpu_backend::{RenderPass, ScreenDescriptor};
@@ -37,7 +37,7 @@ enum TabKind {
 type Title = &'static str;
 
 struct Buffers {
-    inner: BTreeMap<Title, TabKind>,
+    inner: HashMap<Title, TabKind>,
 }
 
 impl Buffers {
@@ -174,7 +174,7 @@ fn main() {
     let source_title = icon!(EMBED2, "Source");
     let disass_title = icon!(PARAGRAPH_LEFT, "Disassembly");
 
-    let buffers = BTreeMap::from([
+    let buffers = HashMap::from([
         (source_title, TabKind::Listing(1600)),
         (
             disass_title,
